@@ -27,25 +27,24 @@ log = logging.getLogger(__package__)
 
 
 class DataChunk(object):
-    def __init__(self, data, offset=0, is_data=False):
+    def __init__(self, data, sig_mode, offset=0, is_data=False):
         self.data = data
         self.offset = offset
+        self.sig_mode = sig_mode
         self.is_data = is_data
 
 
 class YaraGenerator(object):
-    def __init__(self, sig_mode, instruction_set, instruction_mode, rule_name="generated_rule", do_comment=True):
+    def __init__(self, instruction_set, instruction_mode, rule_name="generated_rule", do_comment=True):
         self.instruction_set = instruction_set
         self.instruction_mode = instruction_mode
         self.do_comment_sig = do_comment
-        self.sig_mode = sig_mode
-        self.rule_name = rule_name
-        self.yr_rule = YaraRule()
+        self.rule_name = rule_name        
         self._signature = ""
         self._chunks = []
 
-    def add_chunk(self, data, offset=0, is_data=False):
-        self._chunks.append(DataChunk(data, offset=offset, is_data=is_data))
+    def add_chunk(self, data, sig_mode, offset=0, is_data=False):
+        self._chunks.append(DataChunk(data, sig_mode, offset=offset, is_data=is_data))
 
     def _hex_opcode(self, opcode_list):
         """ Returns a HEX string representation of the Capstone opcode list """
@@ -64,7 +63,7 @@ class YaraGenerator(object):
             data[i] = "?"
         return data
 
-    def _process_instruction(self, ins):
+    def _process_instruction(self, ins, sig_mode):
         """ Process an instruction of the binary, generating a pattern/signature for it """
         ins_str = "{} {}".format(ins.mnemonic, ins.op_str)
         opcode_hex_str = self._hex_opcode(ins.opcode)
@@ -87,9 +86,9 @@ class YaraGenerator(object):
 
         ins_hex_list = list(ins_hex)
 
-        if self.should_wildcard_imm_operand(ins):
+        if self.should_wildcard_imm_operand(ins, sig_mode):
             ins_hex_list = self._wilcard_bytes(ins_hex_list, ins.imm_offset * 2, ins.imm_size * 2)
-        if self.should_wildcard_disp_operand(ins):
+        if self.should_wildcard_disp_operand(ins, sig_mode):
             ins_hex_list = self._wilcard_bytes(ins_hex_list, ins.disp_offset * 2, ins.disp_size * 2)
 
         signature = ''.join(ins_hex_list)
@@ -102,14 +101,14 @@ class YaraGenerator(object):
                 return True
         return False
 
-    def should_wildcard_disp_operand(self, ins):
-        if self.sig_mode in ["loose", "normal"]:
+    def should_wildcard_disp_operand(self, ins, sig_mode):
+        if sig_mode in ["loose", "normal"]:
             return True
         else:
             return self.is_jmp_or_call(ins)
 
-    def should_wildcard_imm_operand(self, ins):
-        if self.sig_mode in ["loose"]:
+    def should_wildcard_imm_operand(self, ins, sig_mode):
+        if sig_mode in ["loose"]:
             return True
         else:
             return self.is_jmp_or_call(ins)
@@ -120,10 +119,11 @@ class YaraGenerator(object):
 
     def generate_rule(self):
         """ Generate Yara rule. Return a YaraRule object """
-        self.yr_rule.rule_name = self.rule_name
-        self.yr_rule.metas["generated_by"] = "\"mkYARA - By Jelle Vergeer\""
-        self.yr_rule.metas["date"] = "\"{}\"".format(datetime.now().strftime("%Y-%m-%d %H:%M"))
-        self.yr_rule.metas["version"] = "\"1.0\""
+        yr_rule = YaraRule()
+        yr_rule.rule_name = self.rule_name
+        yr_rule.metas["generated_by"] = "\"mkYARA - By Jelle Vergeer\""
+        yr_rule.metas["date"] = "\"{}\"".format(datetime.now().strftime("%Y-%m-%d %H:%M"))
+        yr_rule.metas["version"] = "\"1.0\""
 
         md = Cs(self.instruction_set, self.instruction_mode)
         md.detail = True
@@ -135,19 +135,22 @@ class YaraGenerator(object):
             chunk_id = "$chunk_{}".format(chunk_nr)
             chunk_signature = ""
             chunk_comment = ""
-            if chunk.is_data is False:
+            if chunk.sig_mode == "string":
+                chunk_signature = repr(chunk.data)[1:-1]
+                yr_rule.add_string(chunk_id, chunk_signature, StringType.STRING)
+            elif chunk.is_data is False:
                 disasm = md.disasm(chunk.data, chunk.offset)
                 for ins in disasm:
-                    rule_part, comment = self._process_instruction(ins)
+                    rule_part, comment = self._process_instruction(ins, chunk.sig_mode)
                     rule_part = self.format_hex(rule_part)
                     chunk_signature += rule_part + "\n"
                     chunk_comment += comment + "\n"
-                self.yr_rule.add_string(chunk_id, chunk_signature, StringType.HEX)
+                yr_rule.add_string(chunk_id, chunk_signature, StringType.HEX)
                 if self.do_comment_sig:
-                    self.yr_rule.comments.append(chunk_comment)
+                    yr_rule.comments.append(chunk_comment)
             else:
                 rule_part = self.format_hex(chunk.data.encode("hex"))
-                self.yr_rule.add_string(chunk_id, rule_part, StringType.HEX)
+                yr_rule.add_string(chunk_id, rule_part, StringType.HEX)
 
-        self.yr_rule.condition = "any of them"
-        return self.yr_rule
+        yr_rule.condition = "all of them"
+        return yr_rule

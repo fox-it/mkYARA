@@ -60,12 +60,10 @@ def get_arch_info():
 
 
 class YaraRuleDialog(QtWidgets.QDialog):
-    def __init__(self, parent, start_addr, end_addr, yara_rule):
+    def __init__(self, parent, clear_btn_clicked):
         super(YaraRuleDialog, self).__init__(parent)
-        self.start_addr = start_addr
-        self.end_addr = end_addr
-        self.yara_rule = yara_rule
-        self.populate_form()
+        self.clear_btn_clicked = clear_btn_clicked
+        self.populate_form()        
 
     def populate_form(self):
         self.setWindowTitle('mkYARA :: Generated Yara Rule')
@@ -76,7 +74,7 @@ class YaraRuleDialog(QtWidgets.QDialog):
         self.bottom_layout.setAlignment(Qt.AlignRight | Qt.AlignBottom)
         # layout.addStretch()
 
-        self.layout.addWidget(QtWidgets.QLabel("Generated Yara rule from 0x{:x} to 0x{:x}".format(self.start_addr, self.end_addr)))
+        self.layout.addWidget(QtWidgets.QLabel("Generated Yara rule"))
         self.text_edit = QtWidgets.QTextEdit()
         font = QtGui.QFont()
         font.setFamily("Consolas")
@@ -87,8 +85,13 @@ class YaraRuleDialog(QtWidgets.QDialog):
         metrics = QtGui.QFontMetrics(font)
         self.text_edit.setTabStopWidth(4 * metrics.width(' '))
 
-        self.text_edit.insertPlainText(self.yara_rule)
         self.layout.addWidget(self.text_edit)
+
+        self.clear_btn = QtWidgets.QPushButton("Clear")
+        self.clear_btn.setFixedWidth(100)
+        self.clear_btn.clicked.connect(self.clear_btn_clicked)
+        self.clear_btn.clicked.connect(self.clear_btn_clicked_internal)
+        self.bottom_layout.addWidget(self.clear_btn)
 
         self.ok_btn = QtWidgets.QPushButton("OK")
         self.ok_btn.setFixedWidth(100)
@@ -101,6 +104,9 @@ class YaraRuleDialog(QtWidgets.QDialog):
     def ok_btn_clicked(self):
         self.close()
 
+    def clear_btn_clicked_internal(self):
+        self.text_edit.clear()
+
 
 class mkYARAPlugin(idaapi.plugin_t):
     flags = idaapi.PLUGIN_FIX
@@ -109,41 +115,60 @@ class mkYARAPlugin(idaapi.plugin_t):
     wanted_name = "mkYARA"
     wanted_hotkey = ""
     dialog = None
+    yr_gen = None
 
     def init(self):
         loose_yara_action = idaapi.action_desc_t(
-            'mkYARA:generate_loose_yara',   # The action name. This acts like an ID and must be unique
-            'Generate Loose Yara Rule ',  # The action text.
+            'mkYARA:add_loose_yara',   # The action name. This acts like an ID and must be unique
+            'Add Loose Yara Rule ',  # The action text.
             generic_handler(lambda: self.generate_yara_rule("loose")),   # The action handler.
             None,      # Optional: the action shortcut
-            'Generate loose yara rule',  # Optional: the action tooltip (available in menus/toolbar)
+            'Add loose yara rule',  # Optional: the action tooltip (available in menus/toolbar)
             199  # Optional: the action icon (shows when in menus/toolbars)
         )
 
         normal_yara_action = idaapi.action_desc_t(
-            'mkYARA:generate_normal_yara',   # The action name. This acts like an ID and must be unique
-            'Generate Normal Yara Rule ',  # The action text.
+            'mkYARA:add_normal_yara',   # The action name. This acts like an ID and must be unique
+            'Add Normal Yara Rule ',  # The action text.
             generic_handler(lambda: self.generate_yara_rule("normal")),   # The action handler.
             'Ctrl+Y',      # Optional: the action shortcut
-            'Generate normal yara rule',  # Optional: the action tooltip (available in menus/toolbar)
+            'Add normal yara rule',  # Optional: the action tooltip (available in menus/toolbar)
             199  # Optional: the action icon (shows when in menus/toolbars)
         )
 
         strict_yara_action = idaapi.action_desc_t(
-            'mkYARA:generate_strict_yara',   # The action name. This acts like an ID and must be unique
-            'Generate Strict Yara Rule ',  # The action text.
+            'mkYARA:add_strict_yara',   # The action name. This acts like an ID and must be unique
+            'Add Strict Yara Rule ',  # The action text.
             generic_handler(lambda: self.generate_yara_rule("strict")),   # The action handler.
             None,      # Optional: the action shortcut
-            'Generate strict yara rule',  # Optional: the action tooltip (available in menus/toolbar)
+            'Add strict yara rule',  # Optional: the action tooltip (available in menus/toolbar)
             199  # Optional: the action icon (shows when in menus/toolbars)
         )
 
         data_yara_action = idaapi.action_desc_t(
-            'mkYARA:generate_data_yara',   # The action name. This acts like an ID and must be unique
-            'Generate Data Yara Rule ',  # The action text.
+            'mkYARA:add_data_yara',   # The action name. This acts like an ID and must be unique
+            'Add Data Yara Rule ',  # The action text.
             generic_handler(lambda: self.generate_yara_rule("normal", is_data=True)),   # The action handler.
             None,      # Optional: the action shortcut
-            'Generate data yara rule',  # Optional: the action tooltip (available in menus/toolbar)
+            'Add data yara rule',  # Optional: the action tooltip (available in menus/toolbar)
+            199  # Optional: the action icon (shows when in menus/toolbars)
+        )
+
+        string_yara_action = idaapi.action_desc_t(
+            'mkYARA:add_string_yara',   # The action name. This acts like an ID and must be unique
+            'Add String Yara Rule ',  # The action text.
+            generic_handler(lambda: self.generate_yara_rule("string")),   # The action handler.
+            'Ctrl+N',      # Optional: the action shortcut
+            'Add string yara rule',  # Optional: the action tooltip (available in menus/toolbar)
+            199  # Optional: the action icon (shows when in menus/toolbars)
+        )
+
+        generate_yara_action = idaapi.action_desc_t(
+            'mkYARA:generate_yara_rule',   # The action name. This acts like an ID and must be unique
+            'Generate Yara Rule ',  # The action text.
+            generic_handler(lambda: self.generate_yara_rule("generate")),   # The action handler.
+            'Ctrl+Shift+Y',      # Optional: the action shortcut
+            'Generate yara rule',  # Optional: the action tooltip (available in menus/toolbar)
             199  # Optional: the action icon (shows when in menus/toolbars)
         )
 
@@ -151,24 +176,40 @@ class mkYARAPlugin(idaapi.plugin_t):
         idaapi.register_action(normal_yara_action)
         idaapi.register_action(strict_yara_action)
         idaapi.register_action(data_yara_action)
+        idaapi.register_action(string_yara_action)
+        idaapi.register_action(generate_yara_action)
         self.ui_hooks = mkYARAUIHooks()
         self.ui_hooks.hook()
         print('mkYARA :: Plugin Started')
         return idaapi.PLUGIN_KEEP
 
-    def generate_yara_rule(self, mode, is_data=False):
-        start, end = get_selection()
-        size = end - start
-        data = idaapi.get_many_bytes(start, size)
-        ins_set, ins_mode = get_arch_info()
-        yr_gen = YaraGenerator(mode, ins_set, ins_mode)
-        yr_gen.add_chunk(data, offset=start, is_data=is_data)
-        rule_obj = yr_gen.generate_rule()
-        file_hash = get_input_file_hash()
-        rule_obj.metas["hash"] = "\"{}\"".format(file_hash)
-        rule = rule_obj.get_rule_string()
-        self.dialog = YaraRuleDialog(None, start, end, rule)
-        self.dialog.show()
+    def clear_yara(self):
+        self.yr_gen = None
+
+    def generate_yara_rule(self, mode, is_data=False):        
+        if self.yr_gen == None:
+            ins_set, ins_mode = get_arch_info()
+            self.yr_gen = YaraGenerator(ins_set, ins_mode)
+        
+        if mode == 'generate':
+            if self.dialog == None:
+                self.dialog = YaraRuleDialog(None, self.clear_yara)
+            self.dialog.show()
+        else:
+            start, end = get_selection()
+            size = end - start
+            data = idaapi.get_many_bytes(start, size)
+            self.yr_gen.add_chunk(data, mode, offset=start, is_data=is_data)
+            print("Added pattern of type {}: {}  ".format(mode, repr(data)))
+
+        if self.dialog != None:
+            rule_obj = self.yr_gen.generate_rule()
+            file_hash = get_input_file_hash()
+            rule_obj.metas["hash"] = "\"{}\"".format(file_hash)
+            rule = rule_obj.get_rule_string()
+            self.dialog.text_edit.clear()
+            self.dialog.text_edit.insertPlainText(rule)    
+
 
     def term(self):
         self.ui_hooks.unhook()
@@ -196,10 +237,13 @@ class mkYARAUIHooks(idaapi.UI_Hooks):
         pass
 
     def finish_populating_tform_popup(self, form, popup):
-        idaapi.attach_action_to_popup(form, popup, "mkYARA:generate_loose_yara", "mkYARA/")
-        idaapi.attach_action_to_popup(form, popup, "mkYARA:generate_normal_yara", "mkYARA/")
-        idaapi.attach_action_to_popup(form, popup, "mkYARA:generate_strict_yara", "mkYARA/")
-        idaapi.attach_action_to_popup(form, popup, "mkYARA:generate_data_yara", "mkYARA/")
+        idaapi.attach_action_to_popup(form, popup, "mkYARA:add_loose_yara", "mkYARA/")
+        idaapi.attach_action_to_popup(form, popup, "mkYARA:add_normal_yara", "mkYARA/")
+        idaapi.attach_action_to_popup(form, popup, "mkYARA:add_strict_yara", "mkYARA/")
+        idaapi.attach_action_to_popup(form, popup, "mkYARA:add_data_yara", "mkYARA/")
+        idaapi.attach_action_to_popup(form, popup, "mkYARA:add_string_yara", "mkYARA/")
+        idaapi.attach_action_to_popup(form, popup, "mkYARA:generate_yara_rule", "mkYARA/")
+        
 
 
 plugin = mkYARAPlugin()

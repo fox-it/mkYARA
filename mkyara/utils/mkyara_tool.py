@@ -54,7 +54,7 @@ def main():
     parser.add_argument('-n', '--rulename', type=str, help='Generated rule name', default="generated_rule")
     parser.add_argument('-o', '--offset', type=auto_int, help='File offset for signature', required=True)
     parser.add_argument('-s', '--size', type=auto_int, help='Size of desired signature', required=True)
-    parser.add_argument('-m', '--mode', type=str, help="""Wildcard mode for yara rule generation\nloose = wildcard all operands\nnormal = wildcard only displacement operands\nstrict = wildcard only jmp/call addresses""", required=False, choices=["loose", "normal", "strict"], default="normal")
+    parser.add_argument('-m', '--mode', type=str, help="""Wildcard mode for yara rule generation\nloose = wildcard all operands\nnormal = wildcard only displacement operands\nstrict = wildcard only jmp/call addresses""", required=False, choices=["loose", "normal", "strict", "string"], default="normal")
     parser.add_argument('-r', '--result', type=argparse.FileType('w'), help='Output file', required=False, default=None)
     parser.add_argument("-v", "--verbose", action="count", default=0, help="Increase verbosity")
     args = parser.parse_args()
@@ -66,11 +66,11 @@ def main():
     log.info("Disassembling code and generating signature...")
     ins_set = INSTRUCTION_SET_MAPPING[args.instruction_set]
     ins_mode = INSTRUCTION_MODE_MAPPING[args.instruction_mode]
-    yr_gen = YaraGenerator(args.mode, ins_set, ins_mode, rule_name=args.rulename)
+    yr_gen = YaraGenerator(ins_set, ins_mode, rule_name=args.rulename)
     with open(args.file_path, 'rb') as file:
         file.seek(args.offset)
         data = file.read(args.size)
-        yr_gen.add_chunk(data, args.offset)
+        yr_gen.add_chunk(data, args.mode, args.offset)
 
     yr_rule = yr_gen.generate_rule()
     yr_rule.metas["sample"] = "\"{}\"".format(sha256_hash(args.file_path))
