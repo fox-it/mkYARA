@@ -152,5 +152,5 @@ class YaraGenerator(object):
                 rule_part = self.format_hex(chunk.data.encode("hex"))
                 yr_rule.add_string(chunk_id, rule_part, StringType.HEX)
 
-        yr_rule.condition = "any of them"
+        yr_rule.condition = "all of them"
         return yr_rule
