@@ -200,7 +200,7 @@ class mkYARAPlugin(idaapi.plugin_t):
             size = end - start
             data = idaapi.get_many_bytes(start, size)
             self.yr_gen.add_chunk(data, mode, offset=start, is_data=is_data)
-            print("Added pattern of type {}: {}  ".format(mode, repr(data[1:-1])))
+            print("Added pattern of type {}: {}  ".format(mode, repr(data)))
 
         if self.dialog != None:
             rule_obj = self.yr_gen.generate_rule()
