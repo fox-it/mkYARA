@@ -1,6 +1,8 @@
 from __future__ import print_function
 import idaapi
 import idc
+import idautils
+
 from mkyara import (
     YaraGenerator,
 )
@@ -19,12 +21,12 @@ INSTRUCTION_SET_MAPPING = {
 
 
 def get_input_file_hash():
-    return idc.GetInputMD5()
+    return idautils.GetInputFileMD5()
 
 
 def get_selection():
-    start = idc.SelStart()
-    end = idc.SelEnd()
+    start = idc.read_selection_start()
+    end = idc.read_selection_end()
     if idaapi.BADADDR in (start, end):
         ea = idc.here()
         start = idaapi.get_item_head(ea)
@@ -159,7 +161,7 @@ class mkYARAPlugin(idaapi.plugin_t):
     def generate_yara_rule(self, mode, is_data=False):
         start, end = get_selection()
         size = end - start
-        data = idaapi.get_many_bytes(start, size)
+        data = idaapi.get_bytes(start, size)
         ins_set, ins_mode = get_arch_info()
         yr_gen = YaraGenerator(mode, ins_set, ins_mode)
         yr_gen.add_chunk(data, offset=start, is_data=is_data)
@@ -192,10 +194,10 @@ def generic_handler(callback):
 
 
 class mkYARAUIHooks(idaapi.UI_Hooks):
-    def populating_tform_popup(self, form, popup):
+    def populating_widget_popup(self, form, popup):
         pass
 
-    def finish_populating_tform_popup(self, form, popup):
+    def finish_populating_widget_popup(self, form, popup):
         idaapi.attach_action_to_popup(form, popup, "mkYARA:generate_loose_yara", "mkYARA/")
         idaapi.attach_action_to_popup(form, popup, "mkYARA:generate_normal_yara", "mkYARA/")
         idaapi.attach_action_to_popup(form, popup, "mkYARA:generate_strict_yara", "mkYARA/")
