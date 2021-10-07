@@ -1,4 +1,6 @@
 from __future__ import print_function
+import binascii
+
 import idaapi
 import idc
 import idautils
@@ -21,7 +23,13 @@ INSTRUCTION_SET_MAPPING = {
 
 
 def get_input_file_hash():
-    return idautils.GetInputFileMD5()
+    md5 = idautils.GetInputFileMD5()
+    if isinstance(md5, bytes):
+        # return hash will be in lowercase
+        # make Python2-3 compatible
+        return "{}".format(binascii.hexlify(md5).decode())
+    else:
+        return md5
 
 
 def get_selection():
@@ -78,7 +86,10 @@ class YaraRuleDialog(QtWidgets.QDialog):
         self.bottom_layout.setAlignment(Qt.AlignRight | Qt.AlignBottom)
         # layout.addStretch()
 
-        self.layout.addWidget(QtWidgets.QLabel("Generated Yara rule from 0x{:x} to 0x{:x}".format(self.start_addr, self.end_addr)))
+        self.layout.addWidget(
+                QtWidgets.QLabel(
+                    "Generated Yara rule from 0x{:x} to 0x{:x}"
+                    .format(self.start_addr, self.end_addr)))
         self.text_edit = QtWidgets.QTextEdit()
         font = QtGui.QFont()
         font.setFamily("Consolas")
@@ -181,15 +192,15 @@ class mkYARAPlugin(idaapi.plugin_t):
 
 def generic_handler(callback):
     class Handler(idaapi.action_handler_t):
-            def __init__(self):
-                idaapi.action_handler_t.__init__(self)
+        def __init__(self):
+            idaapi.action_handler_t.__init__(self)
 
-            def activate(self, ctx):
-                callback()
-                return 1
+        def activate(self, ctx):
+            callback()
+            return 1
 
-            def update(self, ctx):
-                return idaapi.AST_ENABLE_ALWAYS
+        def update(self, ctx):
+            return idaapi.AST_ENABLE_ALWAYS
     return Handler()
 
 
@@ -198,13 +209,19 @@ class mkYARAUIHooks(idaapi.UI_Hooks):
         pass
 
     def finish_populating_widget_popup(self, form, popup):
-        idaapi.attach_action_to_popup(form, popup, "mkYARA:generate_loose_yara", "mkYARA/")
-        idaapi.attach_action_to_popup(form, popup, "mkYARA:generate_normal_yara", "mkYARA/")
-        idaapi.attach_action_to_popup(form, popup, "mkYARA:generate_strict_yara", "mkYARA/")
-        idaapi.attach_action_to_popup(form, popup, "mkYARA:generate_data_yara", "mkYARA/")
+        idaapi.attach_action_to_popup(
+                form, popup, "mkYARA:generate_loose_yara", "mkYARA/")
+        idaapi.attach_action_to_popup(
+                form, popup, "mkYARA:generate_normal_yara", "mkYARA/")
+        idaapi.attach_action_to_popup(
+                form, popup, "mkYARA:generate_strict_yara", "mkYARA/")
+        idaapi.attach_action_to_popup(
+                form, popup, "mkYARA:generate_data_yara", "mkYARA/")
 
 
 plugin = mkYARAPlugin()
+
+
 def PLUGIN_ENTRY():
     global plugin
     return plugin
