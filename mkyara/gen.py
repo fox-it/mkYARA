@@ -1,6 +1,7 @@
-import logging
 import binascii
 import codecs
+import logging
+import sys
 from capstone import (
     Cs,
     CS_OPT_SYNTAX_INTEL,
@@ -88,9 +89,13 @@ class YaraGenerator(object):
         ins_hex_list = list(ins_hex)
 
         if self.should_wildcard_imm_operand(ins):
-            ins_hex_list = self._wilcard_bytes(ins_hex_list, ins.imm_offset * 2, ins.imm_size * 2)
+            ins_hex_list = self._wilcard_bytes(
+                    ins_hex_list,
+                    ins.imm_offset * 2, ins.imm_size * 2)
         if self.should_wildcard_disp_operand(ins):
-            ins_hex_list = self._wilcard_bytes(ins_hex_list, ins.disp_offset * 2, ins.disp_size * 2)
+            ins_hex_list = self._wilcard_bytes(
+                    ins_hex_list,
+                    ins.disp_offset * 2, ins.disp_size * 2)
 
         signature = ''.join(ins_hex_list)
         return signature, ins_comment
@@ -122,7 +127,8 @@ class YaraGenerator(object):
         """ Generate Yara rule. Return a YaraRule object """
         self.yr_rule.rule_name = self.rule_name
         self.yr_rule.metas["generated_by"] = "\"mkYARA - By Jelle Vergeer\""
-        self.yr_rule.metas["date"] = "\"{}\"".format(datetime.now().strftime("%Y-%m-%d %H:%M"))
+        self.yr_rule.metas["date"] = "\"{}\"".format(
+                datetime.now().strftime("%Y-%m-%d %H:%M"))
         self.yr_rule.metas["version"] = "\"1.0\""
 
         md = Cs(self.instruction_set, self.instruction_mode)
@@ -142,11 +148,18 @@ class YaraGenerator(object):
                     rule_part = self.format_hex(rule_part)
                     chunk_signature += rule_part + "\n"
                     chunk_comment += comment + "\n"
-                self.yr_rule.add_string(chunk_id, chunk_signature, StringType.HEX)
+                self.yr_rule.add_string(
+                        chunk_id,
+                        chunk_signature,
+                        StringType.HEX)
                 if self.do_comment_sig:
                     self.yr_rule.comments.append(chunk_comment)
             else:
-                rule_part = self.format_hex(chunk.data.encode("hex"))
+                if sys.version_info < (3, 0):
+                    rule_part = self.format_hex(chunk.data.encode("hex"))
+                else:
+                    rule_part = self.format_hex(chunk.data.hex())
+
                 self.yr_rule.add_string(chunk_id, rule_part, StringType.HEX)
 
         self.yr_rule.condition = "any of them"
