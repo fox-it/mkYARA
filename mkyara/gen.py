@@ -1,7 +1,6 @@
 import binascii
 import codecs
 import logging
-import sys
 from capstone import (
     Cs,
     CS_OPT_SYNTAX_INTEL,
@@ -152,13 +151,15 @@ class YaraGenerator(object):
                         chunk_id,
                         chunk_signature,
                         StringType.HEX)
+
                 if self.do_comment_sig:
                     self.yr_rule.comments.append(chunk_comment)
             else:
-                if sys.version_info < (3, 0):
-                    rule_part = self.format_hex(chunk.data.encode("hex"))
-                else:
-                    rule_part = self.format_hex(chunk.data.hex())
+                rule_part = self.format_hex(
+                        "{}".format(
+                            binascii.hexlify(chunk.data).decode()
+                            )
+                        )
 
                 self.yr_rule.add_string(chunk_id, rule_part, StringType.HEX)
 
